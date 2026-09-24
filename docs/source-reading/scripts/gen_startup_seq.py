@@ -100,7 +100,7 @@ parts.append(hline(lane_x["mgmt"], lane_x["main"]+20, y_ready+26, GRAY_D, "THV_I
 y_postinit = y_ready + 26 + 34
 postinit_h = 44
 parts.append(actbar(lane_x["main"], y_postinit, postinit_h, 34, GRAY_D))
-parts.append(text(lane_x["main"]+30, y_postinit+26, "SuricataPostInit() — 等所有线程 init 完成", 12, SUB))
+parts.append(text(lane_x["main"]+30, y_postinit+26, "SuricataPostInit() — 等所有线程 init 完成，再放行", 12, SUB))
 
 y_parallel = y_postinit + postinit_h + 30
 parallel_h = 170

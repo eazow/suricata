@@ -74,13 +74,13 @@ body.append(varrow(cx, y2, y))
 init_w = 760
 init_x = cx - init_w/2
 init_steps = [
-    "1. GlobalsInitPreConfig() — 内存分配器、随机种子",
+    "1. GlobalsInitPreConfig() — 时间、阈值、协议名表",
     "2. 读取 yaml 配置项，配置日志系统 SCLogLoadConfig",
     "3. RunModeInitializeThreadSettings() — 线程数/亲和性",
     "4. ParseInterfacesList() — 监听哪些网卡/pcap",
-    "5. PostConfLoadedSetup() — 各子系统初始化",
+    "5. PostConfLoadedSetup() — 注册模块、各子系统初始化",
     "6. SCDropMainThreadCaps() — 权限收敛",
-    "7. PostConfLoadedDetectSetup() — 检测引擎收尾",
+    "7. PostConfLoadedDetectSetup() — 建检测引擎、加载规则",
 ]
 step_h = 27
 init_inner_top = 46
@@ -96,7 +96,7 @@ for step in init_steps:
 rd_w, rd_h = init_w-64, 60
 rd_x = init_x+32
 rd_y = sy + 6
-body.append(box(rd_x, rd_y, rd_w, rd_h, VIOLET, "8. RunModeDispatch()  —— 流水线在这一刻被焊起来并点火", None, "#ffffff", fs_title=14))
+body.append(box(rd_x, rd_y, rd_w, rd_h, VIOLET, "8. RunModeDispatch()  —— 流水线在这一刻被焊起来", None, "#ffffff", fs_title=14))
 
 y2 = y + init_h
 y += init_h + 34
@@ -107,7 +107,7 @@ rdd_w = 760
 rdd_x = cx - rdd_w/2
 rdd_items = [
     ("mode->RunModeFunc()", "组装 TmModule 流水线，创建工作线程"),
-    ("FlowManagerThreadSpawn() 等", "拉起 Flow 管理、统计、日志维护等线程"),
+    ("FlowManagerThreadSpawn() 等", "拉起 Flow 管理、统计、日志刷盘等线程"),
     ("TmThreadsSealThreads()", "封口：之后不再允许创建新线程"),
 ]
 item_w = (rdd_w - 2*40) / 3
@@ -126,7 +126,7 @@ body.append(varrow(cx, y2, y))
 
 # PostInit
 pi_w, pi_h = 420, 56
-body.append(box(cx-pi_w/2, y, pi_w, pi_h, BLUE_L, "SuricataPostInit()", "等待所有线程 init 完成", INK, fs_title=14))
+body.append(box(cx-pi_w/2, y, pi_w, pi_h, BLUE_L, "SuricataPostInit()", "等所有线程 init 完成，再统一放行", INK, fs_title=14))
 y2 = y+pi_h
 y += pi_h + 34
 body.append(varrow(cx, y2, y))
