@@ -65,7 +65,7 @@ header_w, header_h = 260, 56
 headers = [
     ("main", "主线程", "main() 一路跑下来的那条线"),
     ("worker", "工作线程组", "Receive→Decode→FlowWorker→…"),
-    ("mgmt", "管理线程组", "FlowManager / Stats / LogMaintenance"),
+    ("mgmt", "管理线程组", "FlowManager / Stats / LogFlush"),
 ]
 hcolor = {"main": GRAY, "worker": BLUE, "mgmt": VIOLET}
 htcolor = {"main": INK, "worker": "#ffffff", "mgmt": "#ffffff"}
@@ -116,7 +116,7 @@ parts.append(text(lane_x["worker"], y_parallel+parallel_h/2+14, "各自循环，
 
 parts.append(f'<rect x="{lane_x["mgmt"]-bar_w/2}" y="{y_parallel}" width="{bar_w}" height="{parallel_h}" rx="10" fill="{VIOLET}"/>')
 parts.append(text(lane_x["mgmt"], y_parallel+parallel_h/2-6, "flow 超时清理", 13, "#ffffff", "middle", "700"))
-parts.append(text(lane_x["mgmt"], y_parallel+parallel_h/2+14, "统计 / 日志轮转", 11.5, "#ffffff", "middle"))
+parts.append(text(lane_x["mgmt"], y_parallel+parallel_h/2+14, "统计 / 日志刷盘", 11.5, "#ffffff", "middle"))
 
 parts.append(text(W/2, y_parallel+parallel_h+24, "三条线并发跑，谁也不等谁", 13, GRAY_D, "middle", "400", "italic"))
 
