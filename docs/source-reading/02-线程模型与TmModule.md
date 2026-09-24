@@ -35,7 +35,7 @@ typedef struct TmModule_ {
 
 ## 3. 上岗：说明书怎么发给工人，还串成一条线
 
-工位说明书是死的，得有人把它发给具体的工人，还要把好几个工位串成一条线。这活是 `TmSlotSetFuncAppend()`(`src/tm-threads.c:660`)干的：
+工位说明书是死的，得有人把它发给具体的工人，还要把好几个工位串成一条线。这活是 `TmSlotSetFuncAppend()`(`src/tm-threads.c:658`)干的：
 
 ```c
 void TmSlotSetFuncAppend(ThreadVars *tv, TmModule *tm, const void *data)
@@ -62,7 +62,7 @@ void TmSlotSetFuncAppend(ThreadVars *tv, TmModule *tm, const void *data)
 
 ## 4. 一个包，在一个线程里怎么连续闯过好几道工位
 
-`tm_slots` 链表建好之后，包是怎么顺着它走的？答案在 `TmThreadsSlotVarRun()`(`src/tm-threads.c:135`)：
+`tm_slots` 链表建好之后，包是怎么顺着它走的？答案在 `TmThreadsSlotVarRun()`(`src/tm-threads.c:133`)：
 
 ```c
 TmEcode TmThreadsSlotVarRun(ThreadVars *tv, Packet *p, TmSlot *slot)
@@ -84,11 +84,11 @@ TmEcode TmThreadsSlotVarRun(ThreadVars *tv, Packet *p, TmSlot *slot)
 
 `00` 篇里说过，同样一条"捕获→解码→检测→输出"的逻辑链，可以让一个工人从头干到尾(workers)，也可以分两组工人接力(autofp)。落到源码里，两者的差别都很具体，集中在 `src/util-runmodes.c`：
 
-**workers**：`RunModeSetLiveCaptureWorkersForDevice()`(`util-runmodes.c:245`)给*每一个*线程建一个 `ThreadVars`，连续调用四次 `TmSlotSetFuncAppend`：`ReceiveAFP → DecodeAFP → FlowWorker → RespondReject`，输入输出队列都是 `"packetpool"`——没有真正的队列，包从抓包到出结果全程待在同一个线程里，驱动方式是 `"pktacqloop"`(即 `TmThreadsSlotPktAcqLoop`, `tm-threads.c:312`)：线程自己在 `while` 里反复调用链头 `ReceiveAFP` 的 `PktAcqLoop`，抓到一个包就顺着 `slot_next` 交给后面的工位处理完。
+**workers**：`RunModeSetLiveCaptureWorkersForDevice()`(`util-runmodes.c:245`)给*每一个*线程建一个 `ThreadVars`，连续调用四次 `TmSlotSetFuncAppend`：`ReceiveAFP → DecodeAFP → FlowWorker → RespondReject`，输入输出队列都是 `"packetpool"`——没有真正的队列，包从抓包到出结果全程待在同一个线程里，驱动方式是 `"pktacqloop"`(即 `TmThreadsSlotPktAcqLoop`, `tm-threads.c:310`)：线程自己在 `while` 里反复调用链头 `ReceiveAFP` 的 `PktAcqLoop`，抓到一个包就顺着 `slot_next` 交给后面的工位处理完。
 
-**autofp**：`RunModeSetLiveCaptureAutoFp()`(`util-runmodes.c:86`)造了*两组*线程。第一组只干 `Receive + Decode` 两道工位，干完往几条叫 `pickup1`、`pickup2`……的队列(`Tmq`，定义见 `src/tm-queues.c`)里扔;第二组线程专职 `FlowWorker + RespondReject`，各自守着一条 `pickup` 队列，驱动方式是 `"varslot"`(即 `TmThreadsSlotVar`, `tm-threads.c:412`)：线程在 `while` 里反复调用 `tv->tmqh_in(tv)` 从自己的队列里取包，取到了才走 `slot_next` 链。两组线程之间靠队列传包，这就是上一篇说的"传送带"。
+**autofp**：`RunModeSetLiveCaptureAutoFp()`(`util-runmodes.c:85`)造了*两组*线程。第一组只干 `Receive + Decode` 两道工位，干完往几条叫 `pickup1`、`pickup2`……的队列(`Tmq`，定义见 `src/tm-queues.c`)里扔;第二组线程专职 `FlowWorker + RespondReject`，各自守着一条 `pickup` 队列，驱动方式是 `"varslot"`(即 `TmThreadsSlotVar`, `tm-threads.c:410`)：线程在 `while` 里反复调用 `tv->tmqh_in(tv)` 从自己的队列里取包，取到了才走 `slot_next` 链。两组线程之间靠队列传包，这就是上一篇说的"传送带"。
 
-至于"single"模式，翻开 `RunModeSetLiveCaptureSingle()`(`util-runmodes.c:354`)会发现一个不算意外的真相：它调用的还是 `RunModeSetLiveCaptureWorkersForDevice()`，只是把线程数强行钉死成 1、并且只允许配一个网卡。**single 不是第三种拓扑，它就是 workers 模式在"只准一个工人、只准一个入口"限制下的特例**。
+至于"single"模式，翻开 `RunModeSetLiveCaptureSingle()`(`util-runmodes.c:359`)会发现一个不算意外的真相：它调用的还是 `RunModeSetLiveCaptureWorkersForDevice()`，只是把线程数强行钉死成 1、并且只允许配一个网卡。**single 不是第三种拓扑，它就是 workers 模式在"只准一个工人、只准一个入口"限制下的特例**。
 
 ## 6. autofp 的传送带凭什么不把同一条流拆乱
 
