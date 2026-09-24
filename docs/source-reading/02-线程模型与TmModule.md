@@ -103,9 +103,11 @@ ThreadVars *TmThreadCreatePacketHandler(const char *name,
 
 ## 4. 一个包怎么连续闯过好几道工位
 
-两种处理包的主函数，主循环不一样。
+两种处理包的主函数，主循环不一样，但最后会汇到同一个函数里。先看整条调用栈：
 
-**`"pktacqloop"`：线程自己去抓包。** `TmThreadsSlotPktAcqLoop()`(`src/tm-threads.c:310`)的主循环很简单，就是调用链头那个 `TmSlot` 的 `PktAcqLoop`，比如 `ReceiveAFPLoop()`。抓包循环在自己手里，所以抓包模块会把"链上剩下的部分"记下来：`ReceiveAFP` 初始化时保存了 `ptv->slot = s->slot_next`(`src/source-af-packet.c:1313`)。每抓到一个包，就调用 `TmThreadsSlotProcessPkt()`(`src/tm-threads.h:195`)把包交给后面的工位：
+![一个包在线程里的调用栈](images/suricata-callstack.svg)
+
+**`"pktacqloop"`：线程自己去抓包。** `TmThreadsSlotPktAcqLoop()`(`src/tm-threads.c:310`)的主循环很简单，就是调用链头那个 `TmSlot` 的 `PktAcqLoop`，比如 `ReceiveAFPLoop()`。抓包循环在自己手里，所以抓包模块会把"链上剩下的部分"记下来：`ReceiveAFPLoop()` 一开头就保存了 `ptv->slot = s->slot_next`(`src/source-af-packet.c:1313`)。每抓到一个包，就调用 `TmThreadsSlotProcessPkt()`(`src/tm-threads.h:195`)把包交给后面的工位：
 
 ```c
 static inline TmEcode TmThreadsSlotProcessPkt(ThreadVars *tv, TmSlot *s, Packet *p)
