@@ -366,7 +366,7 @@ base = [
     ("线程框架", "tm-threads.c · tm-modules.c", "ThreadVars + TmSlot 串起模块"),
     ("多模式匹配 MPM", "util-mpm-hs.c · util-mpm-ac*.c", "Hyperscan / AC / AC-KS"),
     ("配置系统", "conf.c · conf-yaml-loader.c", "YAML → 树形 SCConfNode"),
-    ("Rust 组件", "rust/src/", "HTTP2 · DNS · TLS · SMB 等解析器"),
+    ("Rust 组件", "rust/src/", "HTTP2 · DNS · QUIC · SMB 等解析器"),
     ("内存与池", "util-pool*.c · util-hash*.c", "Packet/Flow 预分配 + memcap"),
     ("扩展", "util-lua*.c · util-ebpf.c", "Lua 脚本 · eBPF/XDP bypass"),
 ]
