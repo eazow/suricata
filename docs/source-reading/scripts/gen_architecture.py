@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 """Suricata 分层架构图：控制面 | 数据面(Worker 线程流水线) | 管理线程与共享状态 + 底层基础设施。
-所有函数名、文件名均对照 v9.0.0-dev 源码核实。"""
+所有函数名、文件名均对照 v8.0.7 源码核实。"""
 import os
 
 OUT = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'images', 'suricata-architecture.svg')
@@ -90,7 +90,7 @@ STRIP = 168                          # 数据平面每层左侧标签条宽度
 
 # ------------------------------------------------------------------ 标题
 text(M, 50, "Suricata 架构总览", 30, INK, weight=800)
-text(M + 262, 50, "Layered Architecture · v9.0.0-dev", 15, MUTED, weight=600, mono=True)
+text(M + 262, 50, "Layered Architecture · v8.0.7", 15, MUTED, weight=600, mono=True)
 text(M, 78, "一个包从网卡进来，在 Worker 线程里依次经过 采集 → 解码 → FlowWorker(流 / 重组 / 应用层 / 检测 / 输出) → 裁决；"
             "左侧控制平面负责把这条流水线搭起来，右侧管理线程在后台维护共享状态。", 13.5, SUB)
 leg = [("数据流(包)", MUTED, None), ("控制 / 配置注入", C["ctl"], "6,4"), ("后台维护", C["mgmt"], "2,4")]
@@ -380,7 +380,7 @@ for t, f_, d in base:
     bx += bw + 12
 
 H = by + bh + 34
-text(M, H - 12, "Suricata 源码阅读系列 · 函数名与文件名均对照 v9.0.0-dev 源码核实 · 图中线程关系以 workers 运行模式为准", 11.5, MUTED)
+text(M, H - 12, "Suricata 源码阅读系列 · 函数名与文件名均对照 v8.0.7 源码核实 · 图中线程关系以 workers 运行模式为准", 11.5, MUTED)
 
 # ------------------------------------------------------------------ 输出
 def marker(mid, col):
