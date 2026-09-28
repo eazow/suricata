@@ -26,7 +26,7 @@ typedef struct TmModule_ {
 
 `ThreadInit`/`ThreadDeinit` 负责上岗和下岗，中间三个函数指针是三种不同的干活方式，一个模块通常只实现其中一种：
 
-- **`Func`：来一个包处理一个包。** 包递过来才干活，干完就把控制权交回去。`DecodeAFP`、`FlowWorker`、`RespondReject` 都是这一类。
+- **`Func`：来一个包处理一个包。** 包递过来才干活，干完就把控制权交回去。`DecodeAFP`、`FlowWorker`、`RespondReject` 都是这一类。(`RespondReject` 平时什么都不做，只有包命中了动作为 `reject` 的规则时，才会发出 TCP RST 或 ICMP 不可达，主动掐断连接。)
 - **`PktAcqLoop`：自己去抓包。** 只有站在流水线最前端的工位才用，比如 `ReceiveAFP`。它本身就是一个不停抓包的循环，不等别人递包，而是主动去网卡或 pcap 文件里"生产"包。
 - **`Management`：不碰包的后台活。** `FlowManager`、`FlowRecycler` 这类管理线程用的就是它。
 
@@ -84,7 +84,7 @@ ThreadVars *TmThreadCreatePacketHandler(const char *name,
         const char *slots);                             // 驱动方式
 ```
 
-后面会看到，**三种排班方式的差别，几乎全部体现在这五个字符串参数上**。
+后面会看到，**三种排班方式的差别，几乎全部体现在线程名之后的这五个字符串参数上**。
 
 最后一个参数 `slots` 决定线程的主函数。`TmThreadSetSlots()`(`src/tm-threads.c:612`)按名字挑选：
 
@@ -143,7 +143,7 @@ TmEcode TmThreadsSlotVarRun(ThreadVars *tv, Packet *p, TmSlot *slot)
 
 至于包"交出去"交到了哪里，取决于 `tmqh_out`，也就是创建线程时指定的队列处理器(`Tmqh`，定义见 `src/tm-queuehandlers.h:36`)：
 
-- `"packetpool"`：包处理完了，还回本线程的包池，等着下次复用。
+- `"packetpool"`：包处理完了，还回它所属的包池，等着下次复用。workers 里包始终在同一个线程，还回的就是本线程的包池，不用加锁；autofp 里包是抓包线程分配的，处理线程用完后会把它还给抓包线程的包池。
 - `"flow"`：按流的哈希值挑一条队列，把包塞进去，交给另一个线程接着处理。
 
 ## 5. 三种排班方式，差别在哪一行
@@ -170,7 +170,7 @@ ThreadVars *tv = TmThreadCreatePacketHandler(tname,
 | 驱动方式 | `"pktacqloop"` | `"varslot"` |
 | 工位 | `ReceiveAFP → DecodeAFP` | `FlowWorker → RespondReject` |
 
-抓包线程只做抓包和解码，然后按流把包分发到各条 `pickup` 队列；处理线程各守一条队列，取到包再做流跟踪、重组、检测和输出。处理线程的数量由 `TmThreadsGetWorkerThreadMax()` 决定，线程组名是 `"Detect"`。两组线程之间靠队列传包，这就是"传送带"。
+抓包线程只做抓包和解码，然后按流把包分发到各条 `pickup` 队列；处理线程各守一条队列，取到包再做流跟踪、重组、检测和输出。处理线程的数量由 `TmThreadsGetWorkerThreadMax()` 决定，线程组名是 `"Detect"`。两组线程之间靠队列传包，队列就像连接两组工人的传送带。
 
 **single。** 翻开 `RunModeSetLiveCaptureSingle()`(`util-runmodes.c:359`)会发现，它调用的还是 `RunModeSetLiveCaptureWorkersForDevice()`，只是最后一个参数 `single_mode` 传了 1：线程数被钉死成 1，并且配了多个网卡就直接报错退出。**single 不是第三种拓扑，它就是只有一个工人、一个入口的 workers。**
 
