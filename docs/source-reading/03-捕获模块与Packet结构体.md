@@ -84,6 +84,12 @@ typedef struct Packet_ {
 
 包池解决了 `Packet` 从哪来，接下来是包数据从哪来。Linux 上最常用的抓包方式是 AF_PACKET，它的核心是一块内核和用户态共享的环形缓冲区。
 
+**环形缓冲区是什么。** 可以把它想成一圈首尾相连的格子，格子数量固定。写的一方(内核)往前一格一格填包，读的一方(Suricata)跟在后面一格一格取，走到最后一格就绕回第一格，同一块内存反复使用，不用每次重新分配。每一格上有一个状态标记，写明它现在归谁：归内核的格子，内核可以往里写；归 Suricata 的格子，内核不会碰。双方各看各的标记，不需要加锁。
+
+**为什么要用它。** 普通的原始 socket 每收一个包都要调用一次 `recvfrom()`，一次系统调用，外加一次从内核到用户态的拷贝。线速下每秒几十万、上百万个包，光这两样开销就吃不消。环形缓冲区是内核和 Suricata 共享的内存：只要环里有就绪的包，Suricata 直接读内存就行，不用系统调用，也不用拷贝；只有环里暂时没有新包时，才调用 `poll()` 睡下去等。
+
+**环满了会怎样。** 如果 Suricata 处理得比包来得慢，就绪的格子越积越多，最终内核找不到空格子，只能把新到的包直接丢掉，并记在 socket 的统计里。Suricata 通过 `PACKET_STATISTICS` 把这个数取出来，计入 `capture.kernel_drops` 计数器(`src/source-af-packet.c:2638`)。所以在 `stats.log` 里看到 `capture.kernel_drops` 在涨，意思就是：环满了，包在进入 Suricata 之前就被内核丢掉了。
+
 **建环。** `AFPCreateSocket()`(`src/source-af-packet.c:1942`)做了这么几件事：
 
 1. `socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL))` 创建一个原始套接字(第 1951 行)。
@@ -93,7 +99,7 @@ typedef struct Packet_ {
 
 有一个时机上的细节：这个 socket 不是在启动阶段创建的，而是在 `ReceiveAFPLoop()` 第一次运行时才创建，也就是线程被放行之后。这时主线程早已降过权，第 1 篇提到的"af-packet 模式保留 `CAP_NET_RAW`"，就是留给这一步用的。
 
-**环里的交接。** 环被切成一格一格的帧，每一帧的头部有一个 `tp_status` 字段，内核和 Suricata 就靠它交接：
+**环里的交接。** 前面说的状态标记，落到代码里就是每一格(帧)头部的 `tp_status` 字段，内核和 Suricata 靠它交接：
 
 - `TP_STATUS_KERNEL`：这一格归内核，内核可以往里写新包。
 - `TP_STATUS_USER`：内核已经写好了一个包，这一格归 Suricata 读。
