@@ -65,7 +65,7 @@ typedef struct FlowBucket_ {
 } FlowBucket;
 ```
 
-所有 worker 线程共用这一张表。加锁按桶来，不同线程查不同的桶时互不干扰；而在 workers 模式下，AF_PACKET 已经按流把包分给了固定的线程(第 3 篇)，同一个桶真正被多个线程同时争抢的情况并不多。
+所有 worker 线程共用这一张表。锁的粒度是一个桶，不同线程查不同的桶时互不干扰；而且桶锁只在查找、插入的那一小段时间里持有，找到流之后就释放了。
 
 **两个方向算出同一个哈希。** `flow_hash` 是解码时由 `FlowGetHash()`(`src/flow-hash.c:200`)算好的：
 
@@ -139,7 +139,7 @@ do {
 - `FlowCompare()` 比较时同样不分方向，正向、反向的包都能认出是同一条流。
 - 找到的 `Flow` 是带着锁返回的。接下来 `FlowWorker` 对这个包做重组、应用层解析、检测时，一直持有这把流锁，处理完才释放。
 - 一边找，一边顺手清理。`timeout_check` 为真时，遍历中碰到的每条流都会检查是否超时，超时的直接移出桶，放进本线程的工作队列。为了不在每次查找时都做这件事，FlowManager 会给每个桶记一个 `next_ts`：桶里最早可能超时的时间。包的时间还没到这个时间，就不用检查。
-- `TcpSessionPacketSsnReuse()` 处理端口复用：同一个五元组上，旧连接已经结束、又来了一个新的 SYN，就把旧流换下来，新建一条。
+- `TcpSessionPacketSsnReuse()` 处理端口复用：同一个五元组上出现了一条新的 TCP 连接(比如旧连接已经结束、又来了一个新的 SYN)，就把旧流换下来，新建一条。
 
 ## 3. 新流从哪来
 
@@ -175,7 +175,7 @@ do {
 **流的状态。** `Flow` 有几种状态：`NEW`、`ESTABLISHED`、`CLOSED`，另外还有两种 bypass 状态，这里先不展开。状态由谁来推进，取决于协议：
 
 - **UDP 等无连接协议**：两个方向都见过包，就算 `ESTABLISHED`(`FlowHandlePacketUpdate()`，`src/flow.c:408`)。
-- **TCP**：由 TCP 重组模块根据握手和挥手来推进，三次握手完成算 `ESTABLISHED`，连接关闭算 `CLOSED`(下一篇)。
+- **TCP**：由 TCP 重组模块根据握手和挥手来推进：三次握手完成算 `ESTABLISHED`，挥手的前半段也还算 `ESTABLISHED`，到了挥手的最后阶段(`LAST_ACK`、`TIME_WAIT`)或连接关闭才算 `CLOSED`(`src/stream-tcp.c:1009` 起，下一篇细讲)。
 
 状态之所以重要，是因为它决定了超时时长。`FlowUpdateState()`(`src/flow.c:1181`)每次改状态，都会重新计算 `f->timeout_policy`。默认配置(`suricata.yaml` 的 `flow-timeouts`)里，TCP 的超时是这样的：
 
@@ -185,7 +185,7 @@ do {
 | established | 600 秒 | 100 秒 |
 | closed | 60 秒 | 10 秒 |
 
-UDP 和 ICMP 的 new、established 分别是 30 秒和 300 秒。一条还在握手的连接如果迟迟没有下文，很可能是扫描，所以 new 的超时比 established 短得多；而紧急模式下，所有超时都大幅缩短，好尽快腾出内存。
+UDP 和 ICMP 的 new、established 分别是 30 秒和 300 秒。可以看到，new 的超时比 established 短得多：握手迟迟没有下文的连接(比如扫描)，不会长时间占着内存。紧急模式下，所有超时都大幅缩短，好尽快腾出内存。
 
 ## 5. 过期和回收
 
@@ -212,7 +212,7 @@ static void Recycler(ThreadVars *tv, FlowRecyclerThreadData *ftd, Flow *f)
 
 处理完的流再成批还回全局备用池，等着下一次被取走。
 
-这也回答了 00 篇留下的一个现象：`curl` 一次之后，`eve.json` 里的 `flow` 事件总是比 `http` 事件晚出现。因为 `flow` 日志是在流过期、被回收时才写的，它记录的是这条连接从头到尾的汇总：开始和结束时间、两个方向的包数和字节数、结束的原因。
+这也解释了一个常见的现象：像 00 篇开头那样 `curl` 一次，`eve.json` 里的 `flow` 事件总是比 `http` 事件晚出现。因为 `flow` 日志是在流过期、被回收时才写的，它记录的是这条连接从头到尾的汇总：开始和结束时间、两个方向的包数和字节数、结束的原因。
 
 **还没检查完的数据怎么办。** TCP 流有一个特殊情况：过期时，重组缓冲区里可能还有一段数据没有交给应用层解析和检测，比如连接被突然切断、没有正常挥手。直接回收，这段数据就被漏掉了。所以 FlowManager 在把 TCP 流交给 FlowRecycler 之前，会先检查 `FlowNeedsReassembly()`。如果还有没处理的数据，就用 `FlowSendToLocalThread()`(`src/flow-timeout.c:349`)把这条流交回它所属的 worker 线程。worker 线程造几个伪包，沿着正常的流水线把剩下的数据冲刷一遍，做完重组、检测和输出，再回收这条流。worker 线程自己发现超时的流时，`CheckWorkQueue()` 里也有同样的处理。
 
