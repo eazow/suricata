@@ -170,7 +170,7 @@ do {
 
 **谁是客户端。** 新建流时，`FlowInit()`(`src/flow-util.c:147`)把第一个包的源地址、源端口记成 `f->src`、`f->sp`，也就是把第一个包的发送方当作客户端。之后每个包进来，`FlowGetPacketDirection()`(`src/flow.c:285`)拿包的地址和端口跟流里记的比一比，判断是发往服务器(to_server)还是发回客户端(to_client)，记进 `p->flowflags`。规则里的 `flow:to_server`，判断的就是这个标志。
 
-第一个包的发送方不一定真是客户端。比如 Suricata 启动时，某条 TCP 连接已经在进行中，它看到的第一个包可能是服务器回的 SYN/ACK。TCP 重组模块发现这种情况，会调用 `FlowSwap()`(`src/flow.c:245`)把方向翻过来(`src/stream-tcp.c:1333`)。
+第一个包的发送方不一定真是客户端。比如 Suricata 启动时，某条 TCP 连接已经在进行中，它看到的第一个包可能是服务器回的 SYN/ACK。如果配置里开启了中途接管(`stream.midstream`，默认关闭)或 `async-oneside`，TCP 重组模块会接手这条连接，并调用 `FlowSwap()`(`src/flow.c:245`)把方向翻过来(`src/stream-tcp.c:1333`)；默认配置下，它不会为这样的连接建立 TCP 会话(下一篇细讲)。
 
 **流的状态。** `Flow` 有几种状态：`NEW`、`ESTABLISHED`、`CLOSED`，另外还有两种 bypass 状态，这里先不展开。状态由谁来推进，取决于协议：
 
