@@ -70,7 +70,7 @@ typedef struct Packet_ {
 
 ## 2. 包池：提前备好的 Packet
 
-如果每来一个包都 malloc 一个 `Packet`、处理完再 free，线速下内存分配本身就会成为瓶颈。Suricata 的办法是包池。
+如果每来一个包都 malloc 一个 `Packet`、处理完再 free，在线速(链路跑满时也能处理完每一个包)下，内存分配本身就会成为瓶颈。Suricata 的办法是包池。
 
 包池是线程局部的：`src/tmqh-packetpool.c:44` 定义了 `thread_local PktPool thread_pkt_pool;`，每个线程一个，互不干扰。线程启动时(上一篇说的初始化那一步，`src/tm-threads.c:217`)调用 `PacketPoolInit()`，一次性预分配 `max-pending-packets` 个 `Packet`，默认 1024 个(`src/suricata.c:169`)。每个 `Packet` 都记下自己属于哪个池(`p->pool`)，`ReleasePacket` 也设成了 `PacketPoolReturnPacket`。
 
